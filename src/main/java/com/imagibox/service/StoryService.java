@@ -45,19 +45,15 @@ public class StoryService {
             Long userId) {
         log.info("Generating one-shot story for user {}", userId);
 
-        // 1. Validate content safety
         contentSafetyService.validatePrompt(request.getPrompt());
 
-        // 2. Get user and check quota
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
         rateLimitService.checkAndIncrementQuota(userId, user.getDailyQuota());
 
-        // 3. Generate story content with AI
         Map<String, String> storyData = aiService.generateStory(request.getPrompt(), request.getMood());
         String rawResponse = storyData.get("raw");
 
-        // Parse AI response
         Map<String, String> parsedStory;
         try {
             parsedStory = objectMapper.readValue(rawResponse, new TypeReference<>() {
@@ -71,22 +67,18 @@ public class StoryService {
         String content = parsedStory.getOrDefault("content", rawResponse);
         String moral = parsedStory.getOrDefault("moral", "");
 
-        // 4. Handle image generation
+        // Handle image generation - TODO: might want to make this fully async later
         String imageUrl = null;
         String sketchUrl = null;
 
         try {
             if (sketch != null && !sketch.isEmpty()) {
-                // Upload sketch to Cloudinary
                 sketchUrl = imageService.uploadToCloudinary(sketch);
-
-                // Generate illustration from sketch (async)
                 imageUrl = imageService.generateIllustration(
                         sketchUrl,
                         request.getPrompt(),
-                        request.getMood()).join(); // Wait for completion
+                        request.getMood()).join();
             } else {
-                // Generate illustration from text only (async)
                 imageUrl = imageService.generateIllustrationFromText(
                         request.getPrompt(),
                         request.getMood()).join();
@@ -96,7 +88,6 @@ public class StoryService {
             imageUrl = null;
         }
 
-        // 5. Create and save story
         Story story = Story.builder()
                 .user(user)
                 .title(title)
@@ -109,7 +100,6 @@ public class StoryService {
 
         storyRepository.save(story);
 
-        // 6. Create chapter
         Map<String, Object> chapterContent = new HashMap<>();
         chapterContent.put("text", content);
         chapterContent.put("moral", moral);
@@ -126,7 +116,7 @@ public class StoryService {
 
         chapterRepository.save(chapter);
 
-        // 7. Save mood tag for analytics
+        // Track mood for parent dashboard
         if (request.getMood() != null) {
             MoodTag moodTag = MoodTag.builder()
                     .chapter(chapter)
@@ -137,7 +127,6 @@ public class StoryService {
 
         log.info("Story created successfully: {}", story.getId());
 
-        // 8. Return response
         return mapToStoryResponse(story, Collections.singletonList(chapter));
     }
 
@@ -145,7 +134,6 @@ public class StoryService {
     public ChapterResponseDto generateNextChapter(Long storyId, NextChapterRequest request, Long userId) {
         log.info("Generating next chapter for story {}", storyId);
 
-        // 1. Validate ownership
         Story story = storyRepository.findById(storyId)
                 .orElseThrow(() -> new ResourceNotFoundException("Story not found"));
 
@@ -157,11 +145,9 @@ public class StoryService {
             throw new IllegalArgumentException("Only interactive stories can have multiple chapters");
         }
 
-        // 2. Get all previous chapters to build context
         List<Chapter> previousChapters = chapterRepository.findByStoryIdOrderByChapterNumberAsc(storyId);
         String context = buildContext(previousChapters);
 
-        // 3. Generate next chapter with AI
         Map<String, String> chapterData = aiService.generateNextChapter(context, request.getUserChoice());
         String rawResponse = chapterData.get("raw");
 
@@ -178,7 +164,7 @@ public class StoryService {
         String choiceA = parsedChapter.get("choiceA");
         String choiceB = parsedChapter.get("choiceB");
 
-        // 4. Generate chapter illustration
+        // FIXME: sometimes image generation times out here
         String imageUrl = null;
         try {
             imageUrl = imageService.generateIllustrationFromText(content, story.getMetadata().get("mood").toString())
@@ -187,7 +173,6 @@ public class StoryService {
             log.error("Image generation failed", e);
         }
 
-        // 5. Create new chapter
         int nextChapterNumber = previousChapters.size() + 1;
 
         Map<String, Object> chapterContent = new HashMap<>();
