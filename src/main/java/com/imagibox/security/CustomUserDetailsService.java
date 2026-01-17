@@ -14,18 +14,19 @@ import java.util.Collections;
 @RequiredArgsConstructor
 public class CustomUserDetailsService implements UserDetailsService {
 
-    private final UserRepository userRepository;
+        private final UserRepository userRepository;
 
-    @Override
-    public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
-        var user = userRepository.findByUsername(username)
-                .orElseThrow(() -> new UsernameNotFoundException("User not found: " + username));
+        @Override
+        public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
+                var user = userRepository.findByUsername(username)
+                                .orElseThrow(() -> new UsernameNotFoundException("User not found: " + username));
 
-        return org.springframework.security.core.userdetails.User.builder()
-                .username(user.getUsername())
-                .password(user.getPasswordHash())
-                .authorities(Collections.singletonList(
-                        new SimpleGrantedAuthority("ROLE_" + user.getRole().name())))
-                .build();
-    }
+                return new CustomUserDetails(
+                                user.getUsername(),
+                                user.getPasswordHash(),
+                                Collections.singletonList(
+                                                new SimpleGrantedAuthority("ROLE_" + user.getRole().name())),
+                                user.getId(),
+                                user.getRole().name());
+        }
 }

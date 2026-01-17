@@ -6,7 +6,7 @@ import com.imagibox.dto.request.RegisterParentRequest;
 import com.imagibox.dto.response.AuthResponse;
 import com.imagibox.dto.response.UserDto;
 import com.imagibox.service.AuthService;
-import com.imagibox.service.JwtService;
+import com.imagibox.util.SecurityUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -24,7 +24,6 @@ import java.util.List;
 public class AuthController {
 
     private final AuthService authService;
-    private final JwtService jwtService;
 
     @PostMapping("/register")
     public ResponseEntity<AuthResponse> registerParent(@Valid @RequestBody RegisterParentRequest request) {
@@ -37,19 +36,14 @@ public class AuthController {
     }
 
     @PostMapping("/kids")
-    public ResponseEntity<UserDto> createKidAccount(
-            @Valid @RequestBody CreateKidRequest request,
-            @RequestHeader("Authorization") String authHeader) {
-        String token = authHeader.substring(7);
-        Long parentId = jwtService.extractUserId(token);
+    public ResponseEntity<UserDto> createKidAccount(@Valid @RequestBody CreateKidRequest request) {
+        Long parentId = SecurityUtils.getCurrentUserId();
         return ResponseEntity.ok(authService.createKidAccount(request, parentId));
     }
 
     @GetMapping("/kids")
-    public ResponseEntity<List<UserDto>> getMyKids(
-            @RequestHeader("Authorization") String authHeader) {
-        String token = authHeader.substring(7);
-        Long parentId = jwtService.extractUserId(token);
+    public ResponseEntity<List<UserDto>> getMyKids() {
+        Long parentId = SecurityUtils.getCurrentUserId();
         return ResponseEntity.ok(authService.getKidsByParent(parentId));
     }
 
