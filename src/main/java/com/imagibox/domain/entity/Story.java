@@ -35,12 +35,12 @@ public class Story {
     private String title;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, columnDefinition = "story_status")
+    @Column(nullable = false, length = 20)
     @Builder.Default
     private StoryStatus status = StoryStatus.DRAFT;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, columnDefinition = "story_mode")
+    @Column(nullable = false, length = 20)
     private StoryMode mode;
 
     @Type(JsonBinaryType.class)

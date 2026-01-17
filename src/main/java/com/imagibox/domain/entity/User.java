@@ -1,6 +1,7 @@
 package com.imagibox.domain.entity;
 
 import com.imagibox.domain.enums.UserRole;
+
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
@@ -33,7 +34,7 @@ public class User {
     private String passwordHash;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, columnDefinition = "user_role")
+    @Column(nullable = false, length = 20)
     private UserRole role;
 
     @ManyToOne(fetch = FetchType.LAZY)

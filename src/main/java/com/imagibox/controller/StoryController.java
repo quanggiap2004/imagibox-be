@@ -30,8 +30,18 @@ public class StoryController {
     @PostMapping(value = "/generate-one-shot", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @Operation(summary = "Generate a one-shot story", description = "Creates a complete story with optional sketch. Prompt is mandatory, sketch is optional.")
     public ResponseEntity<StoryResponseDto> generateOneShot(
-            @RequestPart("request") @Valid GenerateStoryRequest request,
+            @RequestParam("prompt") String prompt,
+            @RequestParam(value = "mood", required = false) String mood,
+            @RequestParam(value = "mode", required = false, defaultValue = "ONE_SHOT") String mode,
             @RequestPart(value = "sketch", required = false) MultipartFile sketch) {
+
+        // Build the request object from individual fields
+        GenerateStoryRequest request = GenerateStoryRequest.builder()
+                .prompt(prompt)
+                .mood(mood)
+                .mode(mode)
+                .build();
+
         Long userId = SecurityUtils.getCurrentUserId();
         StoryResponseDto story = storyService.generateOneShot(request, sketch, userId);
         return ResponseEntity.ok(story);
