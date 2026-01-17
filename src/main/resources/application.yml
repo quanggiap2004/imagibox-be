@@ -3,12 +3,12 @@ spring:
     name: imagibox-backend
   
   datasource:
-    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/imagibox}
-    username: ${DATABASE_USERNAME:postgres}
-    password: ${DATABASE_PASSWORD:}
+    url: ${DATABASE_URL}
+    username: ${DATABASE_USERNAME}
+    password: ${DATABASE_PASSWORD}
     driver-class-name: org.postgresql.Driver
     hikari:
-      maximum-pool-size: 10
+      maximum-pool-size: 15
       minimum-idle: 5
       connection-timeout: 30000
   
@@ -41,24 +41,23 @@ spring:
           max-idle: 8
           min-idle: 0
   
+  # File Upload Configuration
   servlet:
     multipart:
       max-file-size: 10MB
       max-request-size: 10MB
       enabled: true
 
-# Gemini AI config
+# Gemini AI config (Google AI Studio - Simple API Key)
 spring.ai:
-  vertex:
-    ai:
-      gemini:
-        project-id: ${GEMINI_PROJECT_ID:}
-        location: ${GEMINI_LOCATION:us-central1}
-        chat:
-          options:
-            model: gemini-2.0-flash-exp
-            temperature: 0.7
-            max-output-tokens: 2048
+  openai:
+    api-key: ${GEMINI_API_KEY}
+    base-url: https://generativelanguage.googleapis.com/v1beta/openai/
+    chat:
+      options:
+        model: gemini-2.0-flash-exp
+        temperature: 0.7
+        max-tokens: 2048
 
 cloudinary:
   cloud-name: ${CLOUDINARY_CLOUD_NAME:}
@@ -70,6 +69,7 @@ stable-diffusion:
   api-url: ${STABLE_DIFFUSION_API_URL:https://api.stability.ai/v1}
   api-key: ${STABLE_DIFFUSION_API_KEY:}
 
+# JWT Configuration
 jwt:
   secret: ${JWT_SECRET:your-secret-key-change-this-in-production-min-256-bits}
   expiration: 86400000  # 24h
@@ -86,7 +86,6 @@ imagibox:
     max-pool-size: 10
     queue-capacity: 100
 
-# Logging - maybe tune this down in prod
 logging:
   level:
     root: INFO

@@ -19,7 +19,7 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/auth")
-@Tag(name = "Authentication")
+@Tag(name = "Authentication", description = "Authentication and user management endpoints")
 @RequiredArgsConstructor
 public class AuthController {
 
@@ -48,7 +48,7 @@ public class AuthController {
     @GetMapping("/kids")
     public ResponseEntity<List<UserDto>> getMyKids(
             @RequestHeader("Authorization") String authHeader) {
-        String token = authHeader.substring(7); // remove "Bearer " prefix
+        String token = authHeader.substring(7);
         Long parentId = jwtService.extractUserId(token);
         return ResponseEntity.ok(authService.getKidsByParent(parentId));
     }

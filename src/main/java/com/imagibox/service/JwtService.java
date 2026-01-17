@@ -3,7 +3,7 @@ package com.imagibox.service;
 import com.imagibox.config.JwtProperties;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.SignatureAlgorithm;
+
 import io.jsonwebtoken.security.Keys;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -48,11 +48,11 @@ public class JwtService {
 
     public String generateToken(Map<String, Object> extraClaims, UserDetails userDetails) {
         return Jwts.builder()
-                .setClaims(extraClaims)
-                .setSubject(userDetails.getUsername())
-                .setIssuedAt(new Date(System.currentTimeMillis()))
-                .setExpiration(new Date(System.currentTimeMillis() + jwtProperties.getExpiration()))
-                .signWith(getSignInKey(), SignatureAlgorithm.HS256)
+                .claims(extraClaims)
+                .subject(userDetails.getUsername())
+                .issuedAt(new Date(System.currentTimeMillis()))
+                .expiration(new Date(System.currentTimeMillis() + jwtProperties.getExpiration()))
+                .signWith(getSignInKey(), Jwts.SIG.HS256)
                 .compact();
     }
 
@@ -70,11 +70,11 @@ public class JwtService {
     }
 
     private Claims extractAllClaims(String token) {
-        return Jwts.parserBuilder()
-                .setSigningKey(getSignInKey())
+        return Jwts.parser()
+                .verifyWith(getSignInKey())
                 .build()
-                .parseClaimsJws(token)
-                .getBody();
+                .parseSignedClaims(token)
+                .getPayload();
     }
 
     private SecretKey getSignInKey() {
