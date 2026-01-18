@@ -131,6 +131,98 @@ public class StoryService {
     }
 
     @Transactional
+    public StoryResponseDto generateInteractive(
+            GenerateStoryRequest request,
+            MultipartFile sketch,
+            Long userId) {
+        log.info("Generating interactive story for user {}", userId);
+
+        contentSafetyService.validatePrompt(request.getPrompt());
+
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+        rateLimitService.checkAndIncrementQuota(userId, user.getDailyQuota());
+
+        // Generate first chapter content
+        Map<String, String> storyData = aiService.generateStory(request.getPrompt(), request.getMood());
+        String rawResponse = storyData.get("raw");
+
+        Map<String, String> parsedStory;
+        try {
+            parsedStory = objectMapper.readValue(rawResponse, new TypeReference<>() {
+            });
+        } catch (Exception e) {
+            log.error("Failed to parse AI response", e);
+            throw new RuntimeException("Failed to generate story");
+        }
+
+        String title = parsedStory.getOrDefault("title", "Câu chuyện tương tác");
+        String content = parsedStory.getOrDefault("content", rawResponse);
+
+        // Handle image generation
+        String imageUrl = null;
+        String sketchUrl = null;
+
+        try {
+            if (sketch != null && !sketch.isEmpty()) {
+                sketchUrl = imageService.uploadToCloudinary(sketch);
+                imageUrl = imageService.generateIllustration(
+                        sketchUrl,
+                        request.getPrompt(),
+                        request.getMood()).join();
+            } else {
+                imageUrl = imageService.generateIllustrationFromText(
+                        request.getPrompt(),
+                        request.getMood()).join();
+            }
+        } catch (Exception e) {
+            log.error("Image generation failed, continuing without image", e);
+            imageUrl = null;
+        }
+
+        // Create interactive story
+        Story story = Story.builder()
+                .user(user)
+                .title(title)
+                .status(StoryStatus.PUBLISHED)
+                .mode(StoryMode.INTERACTIVE)
+                .metadata(new HashMap<>(Map.of(
+                        "mood", request.getMood() != null ? request.getMood() : "Vui vẻ")))
+                .build();
+
+        storyRepository.save(story);
+
+        // Create first chapter
+        Map<String, Object> chapterContent = new HashMap<>();
+        chapterContent.put("text", content);
+
+        Chapter chapter = Chapter.builder()
+                .story(story)
+                .chapterNumber(1)
+                .content(chapterContent)
+                .userPrompt(request.getPrompt())
+                .moodTag(request.getMood())
+                .imageUrl(imageUrl)
+                .originalSketchUrl(sketchUrl)
+                .build();
+
+        chapterRepository.save(chapter);
+
+        // Track mood for parent dashboard
+        if (request.getMood() != null) {
+            MoodTag moodTag = MoodTag.builder()
+                    .chapter(chapter)
+                    .moodTag(request.getMood())
+                    .build();
+            moodTagRepository.save(moodTag);
+        }
+
+        log.info("Interactive story created successfully: {}", story.getId());
+
+        return mapToStoryResponse(story, Collections.singletonList(chapter));
+    }
+
+    @Transactional
     public ChapterResponseDto generateNextChapter(Long storyId, NextChapterRequest request, Long userId) {
         log.info("Generating next chapter for story {}", storyId);
 

@@ -8,7 +8,6 @@ import com.imagibox.service.StoryService;
 import com.imagibox.util.SecurityUtils;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -44,6 +43,25 @@ public class StoryController {
 
         Long userId = SecurityUtils.getCurrentUserId();
         StoryResponseDto story = storyService.generateOneShot(request, sketch, userId);
+        return ResponseEntity.ok(story);
+    }
+
+    @PostMapping(value = "/generate-interactive", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(summary = "Generate an interactive story with first chapter", description = "Creates an interactive story with the first chapter and optional sketch. Prompt is mandatory, sketch is optional.")
+    public ResponseEntity<StoryResponseDto> generateInteractive(
+            @RequestParam("prompt") String prompt,
+            @RequestParam(value = "mood", required = false) String mood,
+            @RequestPart(value = "sketch", required = false) MultipartFile sketch) {
+
+        // Build the request object from individual fields
+        GenerateStoryRequest request = GenerateStoryRequest.builder()
+                .prompt(prompt)
+                .mood(mood)
+                .mode("INTERACTIVE")
+                .build();
+
+        Long userId = SecurityUtils.getCurrentUserId();
+        StoryResponseDto story = storyService.generateInteractive(request, sketch, userId);
         return ResponseEntity.ok(story);
     }
 
