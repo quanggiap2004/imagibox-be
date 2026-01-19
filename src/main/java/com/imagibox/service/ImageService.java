@@ -2,6 +2,11 @@ package com.imagibox.service;
 
 import com.cloudinary.Cloudinary;
 import com.cloudinary.utils.ObjectUtils;
+import com.google.genai.Client;
+import com.google.genai.types.Content;
+import com.google.genai.types.GenerateContentConfig;
+import com.google.genai.types.GenerateContentResponse;
+import com.google.genai.types.Part;
 import com.imagibox.config.CloudinaryProperties;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -11,11 +16,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
@@ -28,11 +28,8 @@ public class ImageService {
     private final CloudinaryProperties cloudinaryProperties;
     private final AiService aiService;
 
-    @Value("${stable-diffusion.api-url}")
-    private String stableDiffusionApiUrl;
-
-    @Value("${stable-diffusion.api-key}")
-    private String stableDiffusionApiKey;
+    @Value("${GEMINI_API_KEY}")
+    private String geminiApiKey;
 
     public String uploadToCloudinary(MultipartFile file) throws IOException {
         log.info("Uploading image to Cloudinary: {}", file.getOriginalFilename());
@@ -49,16 +46,38 @@ public class ImageService {
     }
 
     @Async("taskExecutor")
-    public CompletableFuture<String> generateIllustration(String sketchUrl, String prompt, String mood) {
-        log.info("Generating illustration from sketch: {}", sketchUrl);
+    public CompletableFuture<Map<String, String>> generateIllustration(MultipartFile sketch, String prompt,
+            String mood) {
+        log.info("Generating illustration from sketch: {}", sketch.getOriginalFilename());
 
         try {
+            // 1. Extract bytes from sketch
+            byte[] imageBytes = sketch.getBytes();
+
+            // 2. Upload original to Cloudinary for storage/reference
+            String sketchUrl = uploadToCloudinary(sketch);
+
+            // 3. Generate enhanced image prompt
             String imagePrompt = aiService.generateImagePrompt(prompt, mood);
+            log.info("Image prompt length: {}", imagePrompt.length());
+            log.info("Image prompt: {}", imagePrompt);
 
-            String generatedImageUrl = callStableDiffusionImg2Img(sketchUrl, imagePrompt);
+            // 4. Call Gemini API for image-to-image generation
+            byte[] generatedImageBytes = callGeminiImageToImage(imageBytes, imagePrompt);
 
-            log.info("Illustration generated successfully: {}", generatedImageUrl);
-            return CompletableFuture.completedFuture(generatedImageUrl);
+            // 5. Upload generated image to Cloudinary
+            @SuppressWarnings("unchecked")
+            Map<String, Object> uploadResult = cloudinary.uploader().upload(
+                    generatedImageBytes,
+                    ObjectUtils.asMap("folder", cloudinaryProperties.getFolder()));
+            String generatedImageUrl = (String) uploadResult.get("secure_url");
+
+            log.info("Illustration generated successfully. Sketch: {}, Generated: {}", sketchUrl, generatedImageUrl);
+
+            // 6. Return both URLs
+            return CompletableFuture.completedFuture(Map.of(
+                    "sketchUrl", sketchUrl,
+                    "generatedUrl", generatedImageUrl));
         } catch (Exception e) {
             log.error("Failed to generate illustration", e);
             return CompletableFuture.failedFuture(e);
@@ -70,11 +89,17 @@ public class ImageService {
         log.info("Generating illustration from text prompt: {}", prompt);
 
         try {
-            // Generate enhanced image prompt using AI
             String imagePrompt = aiService.generateImagePrompt(prompt, mood);
 
-            // Call Stable Diffusion API for text-to-image generation
-            String generatedImageUrl = callStableDiffusionTxt2Img(imagePrompt);
+            // Call Gemini API for text-to-image generation
+            byte[] generatedImageBytes = callGeminiTextToImage(imagePrompt);
+
+            // Upload to Cloudinary
+            @SuppressWarnings("unchecked")
+            Map<String, Object> uploadResult = cloudinary.uploader().upload(
+                    generatedImageBytes,
+                    ObjectUtils.asMap("folder", cloudinaryProperties.getFolder()));
+            String generatedImageUrl = (String) uploadResult.get("secure_url");
 
             log.info("Illustration generated successfully: {}", generatedImageUrl);
             return CompletableFuture.completedFuture(generatedImageUrl);
@@ -84,68 +109,64 @@ public class ImageService {
         }
     }
 
-    private String callStableDiffusionImg2Img(String initImageUrl, String prompt) throws Exception {
+    private byte[] callGeminiImageToImage(byte[] imageBytes, String prompt) throws IOException {
+        log.info("Calling Gemini image-to-image API (image size: {} bytes)", imageBytes.length);
 
-        String requestBody = String.format("""
-                {
-                    "init_image": "%s",
-                    "text_prompts": [
-                        {
-                            "text": "%s",
-                            "weight": 1.0
-                        }
-                    ],
-                    "cfg_scale": 7,
-                    "samples": 1,
-                    "steps": 30,
-                    "style_preset": "digital-art"
+        try (Client client = Client.builder().apiKey(geminiApiKey).build()) {
+            GenerateContentConfig config = GenerateContentConfig.builder()
+                    .responseModalities("IMAGE")
+                    .build();
+
+            Content content = Content.fromParts(
+                    Part.fromText(prompt),
+                    Part.fromBytes(imageBytes, "image/jpeg"));
+
+            GenerateContentResponse response = client.models.generateContent(
+                    "gemini-2.5-flash-image",
+                    content,
+                    config);
+
+            for (Part part : response.parts()) {
+                if (part.inlineData().isPresent()) {
+                    var blob = part.inlineData().get();
+                    if (blob.data().isPresent()) {
+                        byte[] generatedBytes = blob.data().get();
+                        log.info("Gemini generated image successfully (size: {} bytes)", generatedBytes.length);
+                        return generatedBytes;
+                    }
                 }
-                """, initImageUrl, prompt.replace("\"", "\\\""));
+            }
 
-        return callStableDiffusionApi("/v1/generation/stable-diffusion-xl-1024-v1-0/image-to-image", requestBody);
-    }
-
-    private String callStableDiffusionTxt2Img(String prompt) throws Exception {
-
-        String requestBody = String.format("""
-                {
-                    "text_prompts": [
-                        {
-                            "text": "%s",
-                            "weight": 1.0
-                        }
-                    ],
-                    "cfg_scale": 7,
-                    "height": 512,
-                    "width": 512,
-                    "samples": 1,
-                    "steps": 30,
-                    "style_preset": "digital-art"
-                }
-                """, prompt.replace("\"", "\\\""));
-
-        return callStableDiffusionApi("/v1/generation/stable-diffusion-xl-1024-v1-0/text-to-image", requestBody);
-    }
-
-    private String callStableDiffusionApi(String endpoint, String requestBody) throws Exception {
-        HttpClient client = HttpClient.newHttpClient();
-
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(stableDiffusionApiUrl + endpoint))
-                .header("Content-Type", "application/json")
-                .header("Authorization", "Bearer " + stableDiffusionApiKey)
-                .POST(HttpRequest.BodyPublishers.ofString(requestBody, StandardCharsets.UTF_8))
-                .build();
-
-        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-
-        if (response.statusCode() != 200) {
-            throw new RuntimeException("Stable Diffusion API error: " + response.body());
+            throw new RuntimeException("No image generated in Gemini response");
         }
+    }
 
-        log.debug("Stable Diffusion response: {}", response.body());
+    private byte[] callGeminiTextToImage(String prompt) throws IOException {
+        log.info("Calling Gemini text-to-image API");
 
-        return "https://placeholder-image-url.com/generated.png";
+        try (Client client = Client.builder().apiKey(geminiApiKey).build()) {
+            GenerateContentConfig config = GenerateContentConfig.builder()
+                    .responseModalities("IMAGE")
+                    .build();
+
+            GenerateContentResponse response = client.models.generateContent(
+                    "gemini-2.5-flash-image",
+                    prompt,
+                    config);
+
+            for (Part part : response.parts()) {
+                if (part.inlineData().isPresent()) {
+                    var blob = part.inlineData().get();
+                    if (blob.data().isPresent()) {
+                        byte[] generatedBytes = blob.data().get();
+                        log.info("Gemini generated image successfully (size: {} bytes)", generatedBytes.length);
+                        return generatedBytes;
+                    }
+                }
+            }
+
+            throw new RuntimeException("No image generated in Gemini response");
+        }
     }
 
     public void deleteImage(String publicId) {

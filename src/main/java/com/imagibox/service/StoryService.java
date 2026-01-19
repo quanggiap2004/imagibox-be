@@ -67,17 +67,20 @@ public class StoryService {
         String content = parsedStory.getOrDefault("content", rawResponse);
         String moral = parsedStory.getOrDefault("moral", "");
 
-        // Handle image generation - TODO: might want to make this fully async later
+        // Handle image generation
         String imageUrl = null;
         String sketchUrl = null;
 
         try {
             if (sketch != null && !sketch.isEmpty()) {
-                sketchUrl = imageService.uploadToCloudinary(sketch);
-                imageUrl = imageService.generateIllustration(
-                        sketchUrl,
+                // Pass MultipartFile directly - it handles upload + generation
+                Map<String, String> result = imageService.generateIllustration(
+                        sketch,
                         request.getPrompt(),
                         request.getMood()).join();
+
+                sketchUrl = result.get("sketchUrl");
+                imageUrl = result.get("generatedUrl");
             } else {
                 imageUrl = imageService.generateIllustrationFromText(
                         request.getPrompt(),
@@ -143,8 +146,9 @@ public class StoryService {
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
         rateLimitService.checkAndIncrementQuota(userId, user.getDailyQuota());
 
-        // Generate first chapter content
-        Map<String, String> storyData = aiService.generateStory(request.getPrompt(), request.getMood());
+        // Generate first chapter content with choices
+        Map<String, String> storyData = aiService.generateInteractiveFirstChapter(request.getPrompt(),
+                request.getMood());
         String rawResponse = storyData.get("raw");
 
         Map<String, String> parsedStory;
@@ -158,6 +162,8 @@ public class StoryService {
 
         String title = parsedStory.getOrDefault("title", "Câu chuyện tương tác");
         String content = parsedStory.getOrDefault("content", rawResponse);
+        String choiceA = parsedStory.get("choiceA");
+        String choiceB = parsedStory.get("choiceB");
 
         // Handle image generation
         String imageUrl = null;
@@ -165,11 +171,14 @@ public class StoryService {
 
         try {
             if (sketch != null && !sketch.isEmpty()) {
-                sketchUrl = imageService.uploadToCloudinary(sketch);
-                imageUrl = imageService.generateIllustration(
-                        sketchUrl,
+                // Pass MultipartFile directly - it handles upload + generation
+                Map<String, String> result = imageService.generateIllustration(
+                        sketch,
                         request.getPrompt(),
                         request.getMood()).join();
+
+                sketchUrl = result.get("sketchUrl");
+                imageUrl = result.get("generatedUrl");
             } else {
                 imageUrl = imageService.generateIllustrationFromText(
                         request.getPrompt(),
@@ -177,7 +186,7 @@ public class StoryService {
             }
         } catch (Exception e) {
             log.error("Image generation failed, continuing without image", e);
-            imageUrl = null;
+            return null;
         }
 
         // Create interactive story
@@ -196,10 +205,19 @@ public class StoryService {
         Map<String, Object> chapterContent = new HashMap<>();
         chapterContent.put("text", content);
 
+        // Add choices for interactive mode
+        Map<String, Object> chapterChoices = null;
+        if (choiceA != null && choiceB != null) {
+            chapterChoices = Map.of(
+                    "A", choiceA,
+                    "B", choiceB);
+        }
+
         Chapter chapter = Chapter.builder()
                 .story(story)
                 .chapterNumber(1)
                 .content(chapterContent)
+                .choices(chapterChoices)
                 .userPrompt(request.getPrompt())
                 .moodTag(request.getMood())
                 .imageUrl(imageUrl)

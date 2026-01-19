@@ -56,8 +56,10 @@ spring.ai:
     api-key: ${GEMINI_API_KEY}
     base-url: https://generativelanguage.googleapis.com/v1beta/openai/
     chat:
+      client:
+        timeout: 300000
       options:
-        model: gemini-2.5-flash-lite
+        model: gemini-2.5-flash
         temperature: 0.7
         max-tokens: 4096
 
@@ -66,10 +68,6 @@ cloudinary:
   api-key: ${CLOUDINARY_API_KEY:}
   api-secret: ${CLOUDINARY_API_SECRET:}
   folder: imagibox
-
-stable-diffusion:
-  api-url: ${STABLE_DIFFUSION_API_URL:https://api.stability.ai/v1}
-  api-key: ${STABLE_DIFFUSION_API_KEY:}
 
 # JWT Configuration
 jwt:

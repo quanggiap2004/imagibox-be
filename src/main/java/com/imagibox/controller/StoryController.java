@@ -53,7 +53,6 @@ public class StoryController {
             @RequestParam(value = "mood", required = false) String mood,
             @RequestPart(value = "sketch", required = false) MultipartFile sketch) {
 
-        // Build the request object from individual fields
         GenerateStoryRequest request = GenerateStoryRequest.builder()
                 .prompt(prompt)
                 .mood(mood)

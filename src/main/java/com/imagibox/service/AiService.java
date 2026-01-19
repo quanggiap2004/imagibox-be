@@ -40,6 +40,31 @@ public class AiService {
             }}
             """;
 
+    private static final String INTERACTIVE_FIRST_CHAPTER_TEMPLATE = """
+            Bạn là một nhà văn chuyên viết truyện tương tác cho trẻ em.
+
+            **Chủ đề:** {userPrompt}
+            **Tâm trạng:** {mood}
+
+            **Nhiệm vụ:** Viết CHƯƠNG ĐẦU TIÊN (200-300 từ) của một câu chuyện tương tác.
+            QUAN TRỌNG: Đây chỉ là phần MỞ ĐẦU, KHÔNG phải câu chuyện hoàn chỉnh!
+
+            **Yêu cầu:**
+            1. Giới thiệu nhân vật chính và bối cảnh
+            2. Tạo ra tình huống ban đầu thú vị
+            3. KẾT THÚC ở một điểm quyết định (cliffhanger)
+            4. KHÔNG giải quyết vấn đề - để trẻ quyết định điều gì xảy ra tiếp theo
+            5. Cuối chương đưa ra 2 lựa chọn (A và B) cho nhân vật
+
+            Hãy viết theo định dạng JSON:
+            {{
+              "title": "Tiêu đề câu chuyện",
+              "content": "Nội dung chương 1 - CHỈ PHẦN MỞ ĐẦU, không kết thúc",
+              "choiceA": "Lựa chọn A - Mô tả ngắn gọn",
+              "choiceB": "Lựa chọn B - Mô tả ngắn gọn"
+            }}
+            """;
+
     private static final String CHAPTER_CONTINUATION_TEMPLATE = """
             Bạn là một nhà văn chuyên viết truyện cho trẻ em.
 
@@ -64,21 +89,41 @@ public class AiService {
             """;
 
     private static final String IMAGE_PROMPT_TEMPLATE = """
-            Create a detailed image generation prompt for a children's book illustration based on this story concept:
-
-            Story idea: {userPrompt}
+            Describe a beautiful children's book illustration based on: {userPrompt}
             Mood: {mood}
 
-            Generate a prompt for Stable Diffusion that describes a colorful, child-friendly, cartoon-style illustration.
-            Include: art style (3D cartoon, vibrant colors), main subjects, setting, mood, and artistic details.
+            Write a detailed visual description (150-300 words) for AI image generation.
 
-            Return ONLY the image prompt text, no additional explanation.
+            Include:
+            - Style: professional children's book art, Disney Pixar style, vibrant colors
+            - Characters: cute, expressive, detailed features
+            - Setting: detailed environment and background
+            - Lighting: warm, studio quality matching {mood} mood
+            - Quality: polished, masterpiece, smooth digital painting
+
+            Describe ONLY the final polished result, not the sketch. Keep it under 300 words.
+            Here is an example response:
+            "transform this rough sketch into a professional children's book illustration, Princess Cinderella traveling and bravely beating a scary monster, Disney Pixar style, 3D rendered look, studio lighting, vibrant colors, smooth digital painting, highly detailed, polished, colorful, masterpiece quality, cute friendly character design, scary mood and atmosphere, dark enchanted forest background with glowing eyes, digital art, clean lines, professional coloring, 8k resolution".
             """;
 
     public Map<String, String> generateStory(String userPrompt, String mood) {
         log.info("Generating story with prompt: {} and mood: {}", userPrompt, mood);
 
         PromptTemplate promptTemplate = new PromptTemplate(STORY_GENERATION_TEMPLATE);
+        Prompt prompt = promptTemplate.create(Map.of(
+                "userPrompt", userPrompt,
+                "mood", mood != null ? mood : "Vui vẻ"));
+
+        String response = chatClient.prompt(prompt).call().content();
+        log.debug("AI response: {}", response);
+
+        return parseJsonResponse(response);
+    }
+
+    public Map<String, String> generateInteractiveFirstChapter(String userPrompt, String mood) {
+        log.info("Generating interactive first chapter with prompt: {} and mood: {}", userPrompt, mood);
+
+        PromptTemplate promptTemplate = new PromptTemplate(INTERACTIVE_FIRST_CHAPTER_TEMPLATE);
         Prompt prompt = promptTemplate.create(Map.of(
                 "userPrompt", userPrompt,
                 "mood", mood != null ? mood : "Vui vẻ"));
