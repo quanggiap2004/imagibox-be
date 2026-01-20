@@ -22,6 +22,9 @@ public interface UserRepository extends JpaRepository<User, Long> {
     @Query("SELECT u FROM User u WHERE u.parent.id = :parentId")
     List<User> findKidsByParentId(@Param("parentId") Long parentId);
 
+    @Query("SELECT u.id FROM User u WHERE u.parent.id = :parentId")
+    List<Long> findKidIdByParentId(@Param("parentId") Long parentId);
+
     @Query("SELECT u FROM User u WHERE u.role = 'KID' AND u.parent.id = :parentId")
     List<User> findAllKidsByParent(@Param("parentId") Long parentId);
 }

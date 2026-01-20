@@ -4,8 +4,12 @@ import com.imagibox.dto.response.DashboardResponseDto;
 import com.imagibox.repository.ChapterRepository;
 import com.imagibox.repository.MoodTagRepository;
 import com.imagibox.repository.StoryRepository;
+import com.imagibox.repository.UserRepository;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
 import java.time.OffsetDateTime;
@@ -22,21 +26,35 @@ public class AnalyticsService {
     private final StoryRepository storyRepository;
     private final ChapterRepository chapterRepository;
     private final MoodTagRepository moodTagRepository;
+    private final UserRepository userRepository;
 
-    public DashboardResponseDto getDashboard(Long userId) {
-        log.info("Getting dashboard for user {}", userId);
+    public DashboardResponseDto getDashboard(Long parentId) {
+        log.info("Getting dashboard for parent {}", parentId);
 
-        long totalStories = storyRepository.countByUserId(userId);
+        List<Long> kidIds = userRepository.findKidIdByParentId(parentId);
+
+        // If no kids, return empty dashboard
+        if (kidIds.isEmpty()) {
+            return DashboardResponseDto.builder()
+                    .totalStories(0L)
+                    .storiesThisWeek(0L)
+                    .avgChaptersPerStory(0.0)
+                    .moodDistribution(new HashMap<>())
+                    .activitySummary(new HashMap<>())
+                    .build();
+        }
+
+        long totalStories = storyRepository.countByUserIdIn(kidIds);
 
         // Stories this week
         OffsetDateTime oneWeekAgo = OffsetDateTime.now().minusWeeks(1);
         OffsetDateTime now = OffsetDateTime.now();
-        long storiesThisWeek = storyRepository.findStoriesByUserAndDateRange(userId, oneWeekAgo, now).size();
+        long storiesThisWeek = storyRepository.findStoriesByUserAndDateRange(kidIds, oneWeekAgo, now).size();
 
         // Average chapters per story
-        double avgChapters = calculateAvgChaptersPerStory(userId);
+        double avgChapters = calculateAvgChaptersPerStory(kidIds);
 
-        Map<String, Long> moodDistribution = getMoodDistribution(userId);
+        Map<String, Long> moodDistribution = getMoodDistribution(parentId);
 
         Map<String, Object> activitySummary = new HashMap<>();
         activitySummary.put("totalStories", totalStories);
@@ -51,8 +69,14 @@ public class AnalyticsService {
                 .build();
     }
 
-    public Map<String, Long> getMoodDistribution(Long userId) {
-        List<Map<String, Object>> results = moodTagRepository.getMoodDistributionByUserId(userId);
+    public Map<String, Long> getMoodDistribution(Long parentId) {
+        List<Long> kidIds = userRepository.findKidIdByParentId(parentId);
+
+        if (kidIds.isEmpty()) {
+            return new HashMap<>();
+        }
+
+        List<Map<String, Object>> results = moodTagRepository.getMoodDistributionByUserIdIn(kidIds);
 
         return results.stream()
                 .collect(Collectors.toMap(
@@ -60,8 +84,8 @@ public class AnalyticsService {
                         result -> ((Number) result.get("count")).longValue()));
     }
 
-    private double calculateAvgChaptersPerStory(Long userId) {
-        var stories = storyRepository.findByUserId(userId, org.springframework.data.domain.Pageable.unpaged());
+    private double calculateAvgChaptersPerStory(List<Long> kidsIds) {
+        var stories = storyRepository.findByUserIdIn(kidsIds, Pageable.unpaged());
 
         if (stories.isEmpty()) {
             return 0.0;
