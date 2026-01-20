@@ -330,6 +330,20 @@ public class StoryService {
         return mapToStoryResponse(story, chapters);
     }
 
+    public List<ChapterResponseDto> getChaptersByStoryId(Long storyId, Long userId) {
+        Story story = storyRepository.findById(storyId)
+                .orElseThrow(() -> new ResourceNotFoundException("Story not found"));
+
+        if (!story.getUser().getId().equals(userId)) {
+            throw new UnauthorizedException("You can only view your own stories");
+        }
+
+        List<Chapter> chapters = chapterRepository.findByStoryIdOrderByChapterNumberAsc(storyId);
+        return chapters.stream()
+                .map(this::mapToChapterResponse)
+                .collect(Collectors.toList());
+    }
+
     @Transactional
     public void deleteStory(Long storyId, Long userId) {
         Story story = storyRepository.findById(storyId)

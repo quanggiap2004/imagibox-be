@@ -18,6 +18,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.util.List;
+
 @RestController
 @RequestMapping("/api/v1/stories")
 @Tag(name = "Stories", description = "Story creation and management endpoints")
@@ -96,6 +98,15 @@ public class StoryController {
         Long userId = SecurityUtils.getCurrentUserId();
 
         return ResponseEntity.ok(storyService.getStoryById(storyId, userId));
+    }
+
+    @GetMapping("/{storyId}/chapters")
+    @Operation(summary = "Get all chapters for a story")
+    public ResponseEntity<List<ChapterResponseDto>> getChaptersByStoryId(
+            @PathVariable Long storyId) {
+        Long userId = SecurityUtils.getCurrentUserId();
+
+        return ResponseEntity.ok(storyService.getChaptersByStoryId(storyId, userId));
     }
 
     @DeleteMapping("/{storyId}")

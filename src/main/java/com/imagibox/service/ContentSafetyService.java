@@ -6,6 +6,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.regex.Pattern;
 
 @Service
 @Slf4j
@@ -21,10 +22,9 @@ public class ContentSafetyService {
             throw new IllegalArgumentException("Prompt cannot be empty");
         }
 
-        String lowerPrompt = prompt.toLowerCase();
-
         for (String keyword : INAPPROPRIATE_KEYWORDS) {
-            if (lowerPrompt.contains(keyword.toLowerCase())) {
+            String regex = "(?i)(?U)\\b" + Pattern.quote(keyword) + "\\b";
+            if (Pattern.compile(regex).matcher(prompt).find()) {
                 log.warn("Inappropriate content detected: {}", keyword);
                 throw new ContentUnsafeException("Nội dung chứa từ ngữ không phù hợp: " + keyword);
             }
